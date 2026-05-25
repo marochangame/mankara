@@ -11,7 +11,7 @@ const els = {
   cpuPits: document.getElementById('cpuPits'), humanPits: document.getElementById('humanPits'), cpuStore: document.getElementById('cpuStore'), humanStore: document.getElementById('humanStore'),
   scoreCpu: document.getElementById('scoreCpu'), scoreHuman: document.getElementById('scoreHuman'), turnText: document.getElementById('turnText'), bestMoveTitle: document.getElementById('bestMoveTitle'),
   coachReason: document.getElementById('coachReason'), lineRead: document.getElementById('lineRead'), ranking: document.getElementById('ranking'), pathText: document.getElementById('pathText'), hintBtn: document.getElementById('hintBtn'), newGameBtn: document.getElementById('newGameBtn'),
-  resetBtn: document.getElementById('resetBtn'), undoBtn: document.getElementById('undoBtn'), cpuMoveBtn: document.getElementById('cpuMoveBtn')
+  resetBtn: document.getElementById('resetBtn'), undoBtn: document.getElementById('undoBtn'), cpuMoveBtn: document.getElementById('cpuMoveBtn'), futureBoard: document.getElementById('futureBoard')
 };
 
 function clone(x){ return JSON.parse(JSON.stringify(x)); }
@@ -130,12 +130,14 @@ function traceMove(s, side, pitIndex){
 }
 function rankClass(pct){
   if(pct>=94) return 'best';
-  if(pct>=70) return 'good';
-  if(pct>=50) return 'mid';
-  return 'bad';
+  if(pct>=82) return 'good';
+  if(pct>=62) return 'mid';
+  if(pct>=40) return 'warn';
+  if(pct>=18) return 'bad';
+  return 'trap';
 }
 function moveClass(pct){ return rankClass(pct)+'-move'; }
-function labelForPct(pct){ if(pct>=94) return '神手'; if(pct>=70) return '良手'; if(pct>=50) return '普通'; return '危険'; }
+function labelForPct(pct){ if(pct>=94) return '神手'; if(pct>=82) return '良手'; if(pct>=62) return '普通'; if(pct>=40) return '微妙'; if(pct>=18) return '危険'; return '地雷'; }
 function dots(n){
   const shown = Math.min(n,12);
   let html = '<span class="stones">';
@@ -153,6 +155,15 @@ function pathTextFor(side, move){
   }).join(' → ');
   return toks || '石がありません';
 }
+
+function futureBoardHtml(next){
+  if(!next) return 'おすすめ手を選ぶと、次の盤面イメージを表示します';
+  const human = next.human.map((v,i)=>`<div class="future-pit"><span>${i+1}</span><b>${v}</b>${dots(v)}</div>`).join('');
+  const cpu = next.cpu.slice().reverse().map((v,ri)=>`<div class="future-pit cpu"><span>${6-ri}</span><b>${v}</b>${dots(v)}</div>`).join('');
+  const turn = next.over ? '終局' : (next.turn==='human' ? '次もあなたの手番' : '次は相手の手番');
+  return `<div class="future-status">${turn}</div><div class="future-grid"><div class="future-store">相手<br><b>${next.cpuStore}</b></div><div class="future-pits"><div class="future-row">${cpu}</div><div class="future-row">${human}</div></div><div class="future-store">あなた<br><b>${next.humanStore}</b></div></div>`;
+}
+
 function opponentPain(best){
   if(!best) return '';
   const beforeMoves = legalMoves(state,'cpu').length;
@@ -206,6 +217,11 @@ function render(){
   if(els.pathText){
     const m = previewMove!==null ? previewMove : (best?best.move:null);
     els.pathText.innerHTML = pathTextFor('human', m);
+  }
+  if(els.futureBoard){
+    const m = previewMove!==null ? previewMove : (best?best.move:null);
+    const row = m!==null ? analysisByMove.get(m) : best;
+    els.futureBoard.innerHTML = row ? futureBoardHtml(row.next) : 'おすすめ手を選ぶと、次の盤面イメージを表示します';
   }
 
   document.querySelectorAll('.store').forEach(x=>x.classList.remove('preview','landing'));
