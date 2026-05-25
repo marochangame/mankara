@@ -44,3 +44,36 @@
   }
   .pit.best .count{margin-top:4px}
 }
+
+/* v4.2: remove rule text and enlarge game area on phone */
+.rules{display:none!important}
+@media(max-width:680px){
+  .app{padding:12px 6px 26px}
+  .hero{padding:8px 2px 10px;gap:8px}
+  .hero h1{font-size:clamp(27px,8vw,42px)}
+  .lead{font-size:14px;line-height:1.45;margin-top:6px}
+  .ghost{padding:10px 12px;font-size:13px;min-width:88px}
+  .status-card{padding:12px 14px;border-radius:21px;margin-bottom:10px}
+  .turn{font-size:22px}
+  .scoreline b{font-size:24px}
+  .visual-guide{gap:6px;margin-bottom:8px}
+  .guide-chip{font-size:11px;padding:5px 8px}
+  .guide-note{font-size:11px;line-height:1.35}
+  .board-wrap{margin:10px -4px 14px}
+  .board{grid-template-columns:54px 1fr 54px;gap:7px;padding:8px;border-radius:25px}
+  .pits{gap:5px}
+  .pit{min-height:86px;border-radius:28px;font-size:24px}
+  .store{min-height:184px;border-radius:25px}
+  .store strong{font-size:36px}
+  .store-label{font-size:13px}
+  .pit .count{font-size:20px}
+  .stones{grid-template-columns:repeat(3,5.5px);gap:2.4px;min-height:22px}
+  .stone{width:5.5px;height:5.5px}
+  .pit .badge{font-size:9px;bottom:4px;padding:3px 6px}
+  .pit .quality{font-size:8px;bottom:4px;padding:3px 5px}
+  .pit .num{font-size:10px;top:5px;left:50%;transform:translateX(-50%);padding:2px 6px}
+  .pit .ai-badge{right:-8px;top:-25px;width:42px;min-height:35px;font-size:7px}
+  .mini-map,.future-card,.coach-card{border-radius:20px;margin-bottom:11px;padding:12px}
+  .coach-card h2{font-size:23px;line-height:1.25}
+  .primary{padding:11px 13px;font-size:13px}
+}
