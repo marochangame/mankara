@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#8b5a2b" />
-  <title>マンカラ勝ち筋ナビ v2</title>
+  <title>マンカラ勝ち筋ナビ v3</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="style.css" />
@@ -15,7 +15,7 @@
       <div>
         <p class="eyebrow">MANCALA AI TRAINER</p>
         <h1>マンカラ勝ち筋ナビ</h1>
-        <p class="lead">遊びながら、次の一手を読む練習アプリ</p>
+        <p class="lead">見ただけで強い手がわかる、視覚型マンカラ練習アプリ</p>
       </div>
       <button id="newGameBtn" class="ghost">新しく始める</button>
     </header>
@@ -32,10 +32,11 @@
     </section>
 
     <section class="visual-guide" aria-label="見方ガイド">
+      <div class="guide-chip best">神手</div>
       <div class="guide-chip good">良手</div>
       <div class="guide-chip mid">普通</div>
       <div class="guide-chip bad">危険</div>
-      <div class="guide-note">穴を押すと、石の進む道と止まる場所を表示します</div>
+      <div class="guide-note">穴を押すと、石の進む道・止まる場所・相手が嫌がる理由を表示します</div>
     </section>
 
     <section class="board-wrap" aria-label="マンカラ盤面">
@@ -51,6 +52,11 @@
           <strong id="humanStore">0</strong>
         </div>
       </div>
+    </section>
+
+    <section class="mini-map" aria-label="先読み表示">
+      <div class="mini-title">石の進む道</div>
+      <div id="pathText" class="path-text">おすすめ穴を押すと、ここにルートが出ます</div>
     </section>
 
     <section class="coach-card">

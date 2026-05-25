@@ -10,7 +10,7 @@ let latestAnalysis = [];
 const els = {
   cpuPits: document.getElementById('cpuPits'), humanPits: document.getElementById('humanPits'), cpuStore: document.getElementById('cpuStore'), humanStore: document.getElementById('humanStore'),
   scoreCpu: document.getElementById('scoreCpu'), scoreHuman: document.getElementById('scoreHuman'), turnText: document.getElementById('turnText'), bestMoveTitle: document.getElementById('bestMoveTitle'),
-  coachReason: document.getElementById('coachReason'), lineRead: document.getElementById('lineRead'), ranking: document.getElementById('ranking'), hintBtn: document.getElementById('hintBtn'), newGameBtn: document.getElementById('newGameBtn'),
+  coachReason: document.getElementById('coachReason'), lineRead: document.getElementById('lineRead'), ranking: document.getElementById('ranking'), pathText: document.getElementById('pathText'), hintBtn: document.getElementById('hintBtn'), newGameBtn: document.getElementById('newGameBtn'),
   resetBtn: document.getElementById('resetBtn'), undoBtn: document.getElementById('undoBtn'), cpuMoveBtn: document.getElementById('cpuMoveBtn')
 };
 
@@ -129,9 +129,40 @@ function traceMove(s, side, pitIndex){
   return steps;
 }
 function rankClass(pct){
+  if(pct>=94) return 'best';
   if(pct>=70) return 'good';
   if(pct>=50) return 'mid';
   return 'bad';
+}
+function moveClass(pct){ return rankClass(pct)+'-move'; }
+function labelForPct(pct){ if(pct>=94) return '神手'; if(pct>=70) return '良手'; if(pct>=50) return '普通'; return '危険'; }
+function dots(n){
+  const shown = Math.min(n,12);
+  let html = '<span class="stones">';
+  for(let i=0;i<shown;i++) html += `<span class="stone ${i>=9?'more':''}"></span>`;
+  html += '</span>';
+  return html;
+}
+function pathTextFor(side, move){
+  if(move===null || state[side][move]===0) return '穴を押すと、石の進む道・止まる場所がここに出ます';
+  const steps = traceMove(state, side, move);
+  const toks = steps.map((x,i)=>{
+    const isLast = i===steps.length-1;
+    let label = x.type==='store' ? (x.side==='human'?'あなたストア':'相手ストア') : `${x.side==='human'?'自分':'相手'}${x.index+1}`;
+    return `<span class="path-token ${isLast?'end':''} ${x.type==='store'?'store-token':''}">${i+1}. ${label}</span>`;
+  }).join(' → ');
+  return toks || '石がありません';
+}
+function opponentPain(best){
+  if(!best) return '';
+  const beforeMoves = legalMoves(state,'cpu').length;
+  const afterMoves = legalMoves(best.next,'cpu').length;
+  const notes=[];
+  if(best.next.turn==='human' && !best.next.over) notes.push('相手に番を渡さず、もう一度あなたが打てます');
+  if(afterMoves < beforeMoves) notes.push('相手の選択肢を減らせます');
+  if(best.next.cpuStore===state.cpuStore) notes.push('相手にすぐ点を取らせにくい形です');
+  if(notes.length===0) notes.push('相手の大きな反撃を避けやすい、損の少ない手です');
+  return `<div class="opponent-note">相手が嫌がる理由：${notes.join('。')}。</div>`;
 }
 function previewFor(idx){
   if(previewMove===idx) return;
@@ -149,6 +180,7 @@ function lineReadHtml(best){
     else bits.push(`<div class="line-step">② 最後の石は${last.side==='human'?'自分側':'相手側'}の${last.index+1}番で止まる</div>`);
   }
   bits.push(`<div class="line-step">③ 有利度 ${best.pct}%：${best.reason}</div>`);
+  bits.push(opponentPain(best));
   return bits.join('');
 }
 
@@ -171,6 +203,10 @@ function render(){
   const trace = (state.turn==='human' && previewMove!==null && state.human[previewMove]>0) ? traceMove(state,'human',previewMove) : [];
   const traceKey = new Map(trace.filter(x=>x.type==='pit').map(x=>[`${x.side}-${x.index}`,x.order]));
   const last = trace[trace.length-1];
+  if(els.pathText){
+    const m = previewMove!==null ? previewMove : (best?best.move:null);
+    els.pathText.innerHTML = pathTextFor('human', m);
+  }
 
   document.querySelectorAll('.store').forEach(x=>x.classList.remove('preview','landing'));
   if(last && last.type==='store'){
@@ -191,11 +227,12 @@ function render(){
     const div = pitEl(v, idx+1, true);
     const row = analysisByMove.get(idx);
     if(row && showHints){
-      div.classList.add(rankClass(row.pct));
-      div.insertAdjacentHTML('beforeend',`<span class="quality">${row.pct}%</span>`);
+      const rc = rankClass(row.pct);
+      div.classList.add(rc, moveClass(row.pct));
+      div.insertAdjacentHTML('beforeend',`<span class="quality">${row.pct}%</span><span class="risk-label">${labelForPct(row.pct)}</span>`);
     }
     if(showHints && best && best.move===idx){
-      div.classList.add('best');
+      div.classList.add('best','best-move');
       div.insertAdjacentHTML('beforeend','<span class="ai-badge">AIおすすめ</span>');
     }
     const step = traceKey.get(`human-${idx}`);
@@ -220,10 +257,10 @@ function render(){
     els.lineRead.innerHTML = lineReadHtml(best);
     els.ranking.innerHTML = latestAnalysis.map((r,i)=>`<div class="rank-row"><b>${i+1}位 ${r.move+1}番</b><div class="bar"><span style="width:${r.pct}%"></span></div><b>${r.pct}%</b></div>`).join('');
   } else {
-    els.bestMoveTitle.textContent = '相手AIの手番です'; els.coachReason.textContent = '「相手AIを動かす」を押すと、相手が一手進めます。'; els.lineRead.innerHTML=''; els.ranking.innerHTML='';
+    els.bestMoveTitle.innerHTML = '<span class="thinking">相手AIの手番です</span>';  els.coachReason.textContent = '「相手AIを動かす」を押すと、相手が一手進めます。'; els.lineRead.innerHTML=''; els.ranking.innerHTML='';
   }
 }
-function pitEl(v,num,isHuman){ const div=document.createElement('button'); div.className=`pit ${isHuman?'human':'disabled'}`; div.disabled=!isHuman||state.turn!=='human'||v===0||state.over; div.innerHTML=`<span class="num">${num}</span>${v}${isHuman?'<span class="badge">タップ</span>':''}`; return div; }
+function pitEl(v,num,isHuman){ const div=document.createElement('button'); div.className=`pit ${isHuman?'human':'disabled'}`; div.disabled=!isHuman||state.turn!=='human'||v===0||state.over; div.innerHTML=`<span class="num">${num}</span><span class="count">${v}</span>${dots(v)}${isHuman?'<span class="badge">タップ</span>':''}`; return div; }
 function humanMove(idx){ if(state.turn!=='human'||state.human[idx]===0||state.over) return; history.push(clone(state)); state=applyMove(state,'human',idx); previewMove=null; render(); }
 function cpuMove(){ if(state.turn!=='cpu'||state.over) return; history.push(clone(state)); const choices=analyze(state,'cpu'); if(choices[0]) state=applyMove(state,'cpu',choices[0].move); previewMove=null; render(); }
 function reset(){ state=clone(START); history=[]; previewMove=null; render(); }
