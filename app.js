@@ -4,11 +4,13 @@ const START = { human:[4,4,4,4,4,4], cpu:[4,4,4,4,4,4], humanStore:0, cpuStore:0
 let state = clone(START);
 let history = [];
 let showHints = true;
+let previewMove = null;
+let latestAnalysis = [];
 
 const els = {
   cpuPits: document.getElementById('cpuPits'), humanPits: document.getElementById('humanPits'), cpuStore: document.getElementById('cpuStore'), humanStore: document.getElementById('humanStore'),
   scoreCpu: document.getElementById('scoreCpu'), scoreHuman: document.getElementById('scoreHuman'), turnText: document.getElementById('turnText'), bestMoveTitle: document.getElementById('bestMoveTitle'),
-  coachReason: document.getElementById('coachReason'), ranking: document.getElementById('ranking'), hintBtn: document.getElementById('hintBtn'), newGameBtn: document.getElementById('newGameBtn'),
+  coachReason: document.getElementById('coachReason'), lineRead: document.getElementById('lineRead'), ranking: document.getElementById('ranking'), hintBtn: document.getElementById('hintBtn'), newGameBtn: document.getElementById('newGameBtn'),
   resetBtn: document.getElementById('resetBtn'), undoBtn: document.getElementById('undoBtn'), cpuMoveBtn: document.getElementById('cpuMoveBtn')
 };
 
@@ -103,6 +105,53 @@ function analyze(s, side='human'){
   return rows;
 }
 
+
+function traceMove(s, side, pitIndex){
+  const opp = other(side);
+  let stones = s[side][pitIndex];
+  let pos = pitIndex;
+  let lane = side;
+  const steps = [];
+  while(stones>0){
+    pos++;
+    if(lane===side && pos===6){
+      steps.push({type:'store', side, order:steps.length+1});
+      stones--;
+      if(stones===0) break;
+      lane = opp; pos = -1;
+    } else if(lane===opp && pos===6){
+      lane = side; pos = -1;
+    } else {
+      steps.push({type:'pit', side:lane, index:pos, order:steps.length+1});
+      stones--;
+    }
+  }
+  return steps;
+}
+function rankClass(pct){
+  if(pct>=70) return 'good';
+  if(pct>=50) return 'mid';
+  return 'bad';
+}
+function previewFor(idx){
+  if(previewMove===idx) return;
+  previewMove = idx;
+  render();
+}
+function clearPreview(){ previewMove = null; render(); }
+function lineReadHtml(best){
+  if(!best) return '';
+  const bits = [`<div class="line-step">① 左から${best.move+1}番を選ぶ</div>`];
+  const steps = traceMove(state,'human',best.move);
+  const last = steps[steps.length-1];
+  if(last){
+    if(last.type==='store') bits.push('<div class="line-step">② 最後の石があなたのストアに入る → 連続手番</div>');
+    else bits.push(`<div class="line-step">② 最後の石は${last.side==='human'?'自分側':'相手側'}の${last.index+1}番で止まる</div>`);
+  }
+  bits.push(`<div class="line-step">③ 有利度 ${best.pct}%：${best.reason}</div>`);
+  return bits.join('');
+}
+
 function reasonForMove(s, side, m, ns){
   const beforeStore = side==='human'?s.humanStore:s.cpuStore;
   const afterStore = side==='human'?ns.humanStore:ns.cpuStore;
@@ -116,34 +165,68 @@ function reasonForMove(s, side, m, ns){
 
 function render(){
   els.cpuPits.innerHTML=''; els.humanPits.innerHTML='';
-  let analysis = (!state.over && state.turn==='human') ? analyze(state,'human') : [];
-  const best = analysis[0];
+  latestAnalysis = (!state.over && state.turn==='human') ? analyze(state,'human') : [];
+  const best = latestAnalysis[0];
+  const analysisByMove = new Map(latestAnalysis.map(r=>[r.move,r]));
+  const trace = (state.turn==='human' && previewMove!==null && state.human[previewMove]>0) ? traceMove(state,'human',previewMove) : [];
+  const traceKey = new Map(trace.filter(x=>x.type==='pit').map(x=>[`${x.side}-${x.index}`,x.order]));
+  const last = trace[trace.length-1];
+
+  document.querySelectorAll('.store').forEach(x=>x.classList.remove('preview','landing'));
+  if(last && last.type==='store'){
+    const storeEl = last.side==='human' ? document.querySelector('.human-store') : document.querySelector('.cpu-store');
+    if(storeEl) storeEl.classList.add('preview','landing');
+  }
+  if(trace.some(x=>x.type==='store' && x.side==='human')) document.querySelector('.human-store')?.classList.add('preview');
+  if(trace.some(x=>x.type==='store' && x.side==='cpu')) document.querySelector('.cpu-store')?.classList.add('preview');
+
   state.cpu.slice().reverse().forEach((v,revIdx)=>{
-    const idx = 5-revIdx; const div = pitEl(v, idx+1, false); els.cpuPits.appendChild(div);
+    const idx = 5-revIdx; const div = pitEl(v, idx+1, false);
+    const step = traceKey.get(`cpu-${idx}`);
+    if(step){ div.classList.add('preview'); div.insertAdjacentHTML('beforeend',`<span class="step">${step}</span>`); }
+    if(last && last.type==='pit' && last.side==='cpu' && last.index===idx) div.classList.add('landing');
+    els.cpuPits.appendChild(div);
   });
   state.human.forEach((v,idx)=>{
-    const div = pitEl(v, idx+1, true); if(showHints && best && best.move===idx) div.classList.add('best');
-    div.addEventListener('click',()=>humanMove(idx)); els.humanPits.appendChild(div);
+    const div = pitEl(v, idx+1, true);
+    const row = analysisByMove.get(idx);
+    if(row && showHints){
+      div.classList.add(rankClass(row.pct));
+      div.insertAdjacentHTML('beforeend',`<span class="quality">${row.pct}%</span>`);
+    }
+    if(showHints && best && best.move===idx){
+      div.classList.add('best');
+      div.insertAdjacentHTML('beforeend','<span class="ai-badge">AIおすすめ</span>');
+    }
+    const step = traceKey.get(`human-${idx}`);
+    if(step){ div.classList.add('preview'); div.insertAdjacentHTML('beforeend',`<span class="step">${step}</span>`); }
+    if(last && last.type==='pit' && last.side==='human' && last.index===idx) div.classList.add('landing');
+    div.addEventListener('pointerenter',()=>previewFor(idx));
+    div.addEventListener('focus',()=>previewFor(idx));
+    div.addEventListener('pointerdown',()=>previewFor(idx));
+    div.addEventListener('click',()=>humanMove(idx));
+    els.humanPits.appendChild(div);
   });
   els.cpuStore.textContent = state.cpuStore; els.humanStore.textContent = state.humanStore; els.scoreCpu.textContent = state.cpuStore; els.scoreHuman.textContent = state.humanStore;
   if(state.over){
     const result = state.humanStore>state.cpuStore?'あなたの勝ち！':state.humanStore<state.cpuStore?'相手の勝ち':'引き分け';
     els.turnText.textContent = `終了：${result}`; els.bestMoveTitle.textContent = result; els.coachReason.textContent = `最終スコアは あなた${state.humanStore} - 相手${state.cpuStore} です。`;
-    els.ranking.innerHTML=''; return;
+    els.lineRead.innerHTML=''; els.ranking.innerHTML=''; return;
   }
   els.turnText.textContent = state.turn==='human'?'あなたの手番':'相手の手番';
   if(state.turn==='human' && best){
     els.bestMoveTitle.textContent = `おすすめ：左から${best.move+1}番　有利度${best.pct}%`;
     els.coachReason.textContent = best.reason;
-    els.ranking.innerHTML = analysis.map((r,i)=>`<div class="rank-row"><b>${i+1}位 ${r.move+1}番</b><div class="bar"><span style="width:${r.pct}%"></span></div><b>${r.pct}%</b></div>`).join('');
+    els.lineRead.innerHTML = lineReadHtml(best);
+    els.ranking.innerHTML = latestAnalysis.map((r,i)=>`<div class="rank-row"><b>${i+1}位 ${r.move+1}番</b><div class="bar"><span style="width:${r.pct}%"></span></div><b>${r.pct}%</b></div>`).join('');
   } else {
-    els.bestMoveTitle.textContent = '相手AIの手番です'; els.coachReason.textContent = '「相手AIを動かす」を押すと、相手が一手進めます。'; els.ranking.innerHTML='';
+    els.bestMoveTitle.textContent = '相手AIの手番です'; els.coachReason.textContent = '「相手AIを動かす」を押すと、相手が一手進めます。'; els.lineRead.innerHTML=''; els.ranking.innerHTML='';
   }
 }
 function pitEl(v,num,isHuman){ const div=document.createElement('button'); div.className=`pit ${isHuman?'human':'disabled'}`; div.disabled=!isHuman||state.turn!=='human'||v===0||state.over; div.innerHTML=`<span class="num">${num}</span>${v}${isHuman?'<span class="badge">タップ</span>':''}`; return div; }
-function humanMove(idx){ if(state.turn!=='human'||state.human[idx]===0||state.over) return; history.push(clone(state)); state=applyMove(state,'human',idx); render(); }
-function cpuMove(){ if(state.turn!=='cpu'||state.over) return; history.push(clone(state)); const choices=analyze(state,'cpu'); if(choices[0]) state=applyMove(state,'cpu',choices[0].move); render(); }
-function reset(){ state=clone(START); history=[]; render(); }
+function humanMove(idx){ if(state.turn!=='human'||state.human[idx]===0||state.over) return; history.push(clone(state)); state=applyMove(state,'human',idx); previewMove=null; render(); }
+function cpuMove(){ if(state.turn!=='cpu'||state.over) return; history.push(clone(state)); const choices=analyze(state,'cpu'); if(choices[0]) state=applyMove(state,'cpu',choices[0].move); previewMove=null; render(); }
+function reset(){ state=clone(START); history=[]; previewMove=null; render(); }
 els.cpuMoveBtn.addEventListener('click', cpuMove); els.newGameBtn.addEventListener('click', reset); els.resetBtn.addEventListener('click', reset); els.undoBtn.addEventListener('click',()=>{ if(history.length){ state=history.pop(); render(); }}); els.hintBtn.addEventListener('click',()=>{ showHints=!showHints; els.hintBtn.textContent=showHints?'おすすめ非表示':'おすすめ表示'; render(); });
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
 render();

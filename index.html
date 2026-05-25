@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#8b5a2b" />
-  <title>マンカラ勝ち筋ナビ</title>
+  <title>マンカラ勝ち筋ナビ v2</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="style.css" />
@@ -31,6 +31,13 @@
       </div>
     </section>
 
+    <section class="visual-guide" aria-label="見方ガイド">
+      <div class="guide-chip good">良手</div>
+      <div class="guide-chip mid">普通</div>
+      <div class="guide-chip bad">危険</div>
+      <div class="guide-note">穴を押すと、石の進む道と止まる場所を表示します</div>
+    </section>
+
     <section class="board-wrap" aria-label="マンカラ盤面">
       <div class="board">
         <div class="store cpu-store">
@@ -55,6 +62,7 @@
         <button id="hintBtn" class="primary">おすすめ表示</button>
       </div>
       <p id="coachReason" class="reason">あなたの手番になると、勝ち筋の良い穴を光らせます。</p>
+      <div id="lineRead" class="line-read"></div>
       <div id="ranking" class="ranking"></div>
     </section>
 
