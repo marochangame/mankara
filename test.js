@@ -1,55 +1,4 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f7c86b">
-<title>マンカラ勝ち筋ナビ v4.4 横取り対応</title>
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-:root{--bg1:#fff7d7;--bg2:#f3b95b;--ink:#4a3019;--green:#57b86b;--orange:#ffb44c;--blue:#6eb6ff;--red:#ff6b6b;--panel:rgba(255,255,255,.78);--shadow:rgba(104,62,22,.18)}
-html,body{margin:0;min-height:100%;background:linear-gradient(160deg,var(--bg1),#ffe2a0 55%,var(--bg2));color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",Meiryo,sans-serif}
-body{padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom)}
-.app{width:min(760px,100%);margin:0 auto;padding:10px 0 16px;display:grid;gap:10px}.top{display:flex;align-items:center;justify-content:space-between;gap:8px}.title{font-size:clamp(22px,6vw,34px);font-weight:1000;letter-spacing:.02em;color:#5a381a;-webkit-text-stroke:3px rgba(255,255,255,.85);paint-order:stroke fill;filter:drop-shadow(0 3px 0 rgba(112,70,28,.12))}.pill{border:2px solid rgba(94,58,26,.18);border-radius:999px;background:var(--panel);padding:7px 10px;font-weight:900;box-shadow:0 5px 0 rgba(112,70,28,.08);white-space:nowrap}.board{display:grid;grid-template-columns:68px 1fr 68px;gap:7px;align-items:stretch;background:rgba(119,75,33,.18);border:3px solid rgba(96,58,24,.22);border-radius:28px;padding:8px;box-shadow:0 12px 25px var(--shadow), inset 0 0 0 5px rgba(255,255,255,.22)}.store{border:0;border-radius:24px;background:linear-gradient(#fff7df,#ffd28b);box-shadow:inset 0 -5px 0 rgba(119,75,33,.13),0 4px 0 rgba(92,54,23,.12);font-weight:1000;color:var(--ink);display:grid;place-items:center;min-height:176px;position:relative}.store .num{font-size:42px}.store .label{position:absolute;top:9px;font-size:12px;background:rgba(255,255,255,.7);border-radius:999px;padding:3px 7px}.pits{display:grid;grid-template-rows:1fr 1fr;gap:8px}.row{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}.pit{border:0;border-radius:22px;min-height:82px;background:linear-gradient(#fffef7,#ffe1a7);box-shadow:inset 0 -6px 0 rgba(132,77,29,.13),0 4px 0 rgba(92,54,23,.12);color:var(--ink);font-weight:1000;position:relative;padding:6px}.pit:active,.pit.selected{transform:translateY(2px);box-shadow:inset 0 -3px 0 rgba(132,77,29,.13),0 2px 0 rgba(92,54,23,.1)}.pit.best{outline:5px solid rgba(63,174,93,.75);background:linear-gradient(#f3fff0,#c9f8c6)}.pit.capture{outline:5px solid rgba(255,111,76,.75);background:linear-gradient(#fff5eb,#ffd0b7)}.pit.extra{outline:5px solid rgba(96,171,255,.8);background:linear-gradient(#eff8ff,#cce7ff)}.pit small{position:absolute;left:7px;top:6px;font-size:11px;opacity:.58}.stones{height:44px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:2px;overflow:hidden}.stone{width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff7ce,#e58d32 65%,#a75c1c);box-shadow:0 1px 1px rgba(0,0,0,.18)}.count{font-size:25px;line-height:1}.panel{background:var(--panel);border:2px solid rgba(94,58,26,.14);border-radius:22px;padding:10px;box-shadow:0 8px 20px var(--shadow)}.status{font-size:18px;font-weight:1000;text-align:center;line-height:1.35}.sub{font-size:13px;text-align:center;opacity:.78;margin-top:4px}.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.btn{border:0;border-radius:18px;background:#fff8e7;color:var(--ink);font-weight:1000;padding:12px 8px;font-size:15px;box-shadow:0 4px 0 rgba(99,58,22,.15)}.btn.primary{background:linear-gradient(#fff2b8,#ffca58)}.btn.ai{background:linear-gradient(#e9fff0,#9be3aa)}.btn.danger{background:linear-gradient(#fff1f1,#ffaaaa)}.editGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.editGrid label{font-size:12px;font-weight:900}.editGrid input,.editGrid select{width:100%;font-size:16px;border:2px solid rgba(94,58,26,.18);border-radius:12px;padding:8px;background:#fff}.details{font-size:13px;line-height:1.55}.details b{font-weight:1000}.hintList{display:grid;gap:6px;margin-top:7px}.hintItem{padding:8px;border-radius:14px;background:rgba(255,255,255,.66);display:flex;justify-content:space-between;gap:8px}.tag{border-radius:999px;padding:2px 7px;font-size:12px;font-weight:1000}.tag.cap{background:#ffd3c2}.tag.ext{background:#cfe9ff}.tag.best{background:#c9f8c6}@media(max-width:560px){.board{grid-template-columns:48px 1fr 48px;padding:6px;gap:5px;border-radius:22px}.store{border-radius:18px;min-height:156px}.store .num{font-size:31px}.store .label{font-size:10px;padding:2px 5px;top:6px}.row{gap:5px}.pits{gap:6px}.pit{min-height:74px;border-radius:17px;padding:5px}.stones{height:38px}.stone{width:10px;height:10px}.count{font-size:22px}.controls{grid-template-columns:1fr 1fr}.controls .wide{grid-column:1/-1}.editGrid{grid-template-columns:1fr}.title{font-size:25px}.pill{font-size:12px;padding:6px 8px}}
-</style>
-</head>
-<body>
-<main class="app">
- <div class="top"><div class="title">マンカラ勝ち筋ナビ</div><div class="pill" id="turnPill">あなたの番</div></div>
- <section class="board" aria-label="マンカラ盤面">
-  <button class="store" id="store1" type="button"><span class="label">相手ゴール</span><span class="num">0</span></button>
-  <div class="pits">
-   <div class="row" id="oppRow"></div>
-   <div class="row" id="myRow"></div>
-  </div>
-  <button class="store" id="store0" type="button"><span class="label">自分ゴール</span><span class="num">0</span></button>
- </section>
- <section class="panel">
-  <div class="status" id="status">下の穴をタッチして手を試せます</div>
-  <div class="sub" id="lastMove">v4.4 横取りルール対応：最後の石が自分側の空穴に入ると、向かいの石も取ります。</div>
- </section>
- <section class="controls">
-  <button class="btn ai wide" id="aiBtn">AIおすすめを表示</button>
-  <button class="btn primary" id="undoBtn">一手戻す</button>
-  <button class="btn" id="swapBtn">手番切替</button>
-  <button class="btn danger" id="resetBtn">リセット</button>
- </section>
- <section class="panel details" id="analysisBox">AIおすすめを押すと、横取り・もう一回・相手の横取りリスクまで見ます。</section>
- <section class="panel">
-  <div style="font-weight:1000;margin-bottom:7px">盤面を手入力で合わせる</div>
-  <div class="editGrid">
-   <label>自分側 6穴（左から）<input id="myInput" inputmode="numeric" value="4,4,4,4,4,4"></label>
-   <label>相手側 6穴（左から）<input id="oppInput" inputmode="numeric" value="4,4,4,4,4,4"></label>
-   <label>自分ゴール<input id="myStoreInput" inputmode="numeric" value="0"></label>
-   <label>相手ゴール<input id="oppStoreInput" inputmode="numeric" value="0"></label>
-   <label>次の手番<select id="turnInput"><option value="0">自分</option><option value="1">相手</option></select></label>
-   <button class="btn primary" id="applyBtn" type="button">この盤面にする</button>
-  </div>
- </section>
-</main>
-<script>
+
 const PITS=6, START=4;
 let state={pits:[[4,4,4,4,4,4],[4,4,4,4,4,4]],stores:[0,0],turn:0,gameOver:false};
 let history=[]; let marks={best:null,capture:null,extra:null};
@@ -129,6 +78,3 @@ $('resetBtn').onclick=()=>{history.push(clone(state)); state={pits:[Array(PITS).
 $('applyBtn').onclick=()=>{let my=parseNums($('myInput').value), op=parseNums($('oppInput').value); while(my.length<PITS)my.push(0); while(op.length<PITS)op.push(0); history.push(clone(state)); state={pits:[my,op],stores:[parseInt($('myStoreInput').value,10)||0,parseInt($('oppStoreInput').value,10)||0],turn:parseInt($('turnInput').value,10)||0,gameOver:false}; finishIfNeeded(state); marks={best:null,capture:null,extra:null}; $('lastMove').textContent='入力した盤面に合わせました'; render();};
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
 render();
-</script>
-</body>
-</html>
