@@ -28,7 +28,7 @@ body{padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom)}
  </section>
  <section class="panel">
   <div class="status" id="status">下の穴をタッチして手を試せます</div>
-  <div class="sub" id="lastMove">v4.6 連続ターン先読みAI対応：ゴールぴったり後の「もう一回」から次の手まで読んでおすすめします。</div>
+  <div class="sub" id="lastMove">v4.7 安定AI対応：連続ターンは最大2回まで読み、固まらないよう安全制限を入れています。</div>
  </section>
  <section class="controls">
   <button class="btn ai wide" id="aiBtn">AIおすすめを表示</button>
@@ -93,42 +93,61 @@ function evaluate(s,root){
 }
 function moveLabel(r){return (r.player===0?'自分':'相手')+(r.pit+1)+(r.extra?'→もう一回':'')+(r.capture?'→横取り'+r.capture+'個':'')}
 function lineText(line){return line&&line.length?line.map(moveLabel).join(' / '):''}
-function minimax(s,depth,root,alpha=-Infinity,beta=Infinity){
- if(depth===0||s.gameOver) return {score:evaluate(s,root),line:[]};
+const AI_LIMIT_MS=1200, AI_MAX_DEPTH=5, AI_MAX_EXTRA_CHAIN=2;
+function boardKey(s,depth,extraChain){return s.turn+'|'+depth+'|'+extraChain+'|'+s.stores.join(',')+'|'+s.pits[0].join(',')+'|'+s.pits[1].join(',')}
+function minimaxSafe(s,depth,root,ctx,alpha=-Infinity,beta=Infinity,extraChain=0){
+ if(Date.now()-ctx.start>ctx.limitMs){ctx.timedOut=true; return {score:evaluate(s,root),line:[]};}
+ if(depth<=0||s.gameOver) return {score:evaluate(s,root),line:[]};
+ const key=boardKey(s,depth,extraChain); if(ctx.cache.has(key)) return ctx.cache.get(key);
+ const seenKey=s.turn+'|'+s.stores.join(',')+'|'+s.pits[0].join(',')+'|'+s.pits[1].join(',');
+ if(ctx.seen.has(seenKey)) return {score:evaluate(s,root),line:[]};
+ ctx.seen.add(seenKey);
  const moves=legalMoves(s,s.turn);
- if(!moves.length){const ns=clone(s); ns.turn=1-ns.turn; return minimax(ns,depth-1,root,alpha,beta)}
+ if(!moves.length){const ns=clone(s); ns.turn=1-ns.turn; ctx.seen.delete(seenKey); return minimaxSafe(ns,depth-1,root,ctx,alpha,beta,0)}
  const max=s.turn===root; let best={score:max?-Infinity:Infinity,move:moves[0],result:null,line:[]};
  for(const m of moves){
+  if(Date.now()-ctx.start>ctx.limitMs){ctx.timedOut=true; break;}
   const r=move(s,m);
   const samePlayer=r.extra && !r.state.gameOver;
-  const nextDepth=samePlayer?depth:depth-1;
-  const nxt=minimax(r.state,nextDepth,root,alpha,beta);
+  const allowedExtra=samePlayer && extraChain<ctx.maxExtraChain;
+  const nextDepth=allowedExtra?depth-1:depth-1;
+  let nxt;
+  if(samePlayer && !allowedExtra){
+   nxt={score:evaluate(r.state,root),line:[]};
+  }else{
+   nxt=minimaxSafe(r.state,nextDepth,root,ctx,alpha,beta,allowedExtra?extraChain+1:0);
+  }
   const sign=r.player===root?1:-1;
   const immediate=sign*((r.capture? r.capture*4.5:0) + (r.extra?10:0));
   const adjusted=nxt.score + immediate;
-  const candidateLine=[r].concat(nxt.line||[]);
+  const candidateLine=[r].concat(nxt.line||[]).slice(0,6);
   if(max ? adjusted>best.score : adjusted<best.score) best={score:adjusted,move:m,result:r,line:candidateLine};
   if(max){alpha=Math.max(alpha,adjusted); if(beta<=alpha) break;} else {beta=Math.min(beta,adjusted); if(beta<=alpha) break;}
  }
+ ctx.seen.delete(seenKey);
+ ctx.cache.set(key,best);
  return best;
 }
-function chainAfterFirst(r,root){
+function makeAiContext(limitMs=AI_LIMIT_MS){return {start:Date.now(),limitMs,cache:new Map(),seen:new Set(),timedOut:false,maxExtraChain:AI_MAX_EXTRA_CHAIN}}
+function chainAfterFirst(r,root,ctx){
  if(!r.extra||r.state.gameOver) return '';
- const look=minimax(r.state,4,root);
- const ownLine=(look.line||[]).filter(x=>x.player===root).slice(0,3);
+ const look=minimaxSafe(r.state,2,root,ctx,-Infinity,Infinity,1);
+ const ownLine=(look.line||[]).filter(x=>x.player===root).slice(0,2);
  return ownLine.length?'連続候補：'+ownLine.map(x=>(x.pit+1)+'番'+(x.capture?'横取り'+x.capture+'個':'')).join(' → '):'';
 }
 function aiAnalysis(){
  const player=state.turn; const moves=legalMoves(state,player); if(!moves.length) return [];
- return moves.map(i=>{
+ const ctx=makeAiContext();
+ const result=moves.map(i=>{
   const r=move(state,i);
-  const look=minimax(r.state,9,player);
+  const look=minimaxSafe(r.state,AI_MAX_DEPTH,player,ctx);
   let risk=0;
   if(r.state.turn===1-player && !r.state.gameOver){ legalMoves(r.state,1-player).forEach(j=>{const rr=move({...clone(r.state),turn:1-player},j); risk=Math.max(risk,rr.capture||0)}); }
-  const chain=chainAfterFirst(r,player);
+  const chain=chainAfterFirst(r,player,ctx);
   const score=look.score + (r.capture? r.capture*8:0) + (r.extra?18:0) - risk*6;
-  return {pit:i,result:r,score,capture:r.capture,extra:r.extra,risk,chain,line:look.line};
+  return {pit:i,result:r,score,capture:r.capture,extra:r.extra,risk,chain,line:look.line,timedOut:ctx.timedOut};
  }).sort((a,b)=>b.score-a.score);
+ return result;
 }
 function stonesHTML(n){let html=''; for(let i=0;i<Math.min(n,24);i++) html+='<span class="stone"></span>'; return html;}
 function render(){
@@ -142,12 +161,12 @@ function render(){
 function addPit(player,i,parent,label){ const b=document.createElement('button'); b.type='button'; b.className='pit'; if(player===state.turn&&i===marks.best)b.classList.add('best'); if(player===state.turn&&i===marks.capture)b.classList.add('capture'); if(player===state.turn&&i===marks.extra)b.classList.add('extra'); b.innerHTML=`<small>${player===0?'自分':'相手'}${label}</small><div class="stones">${stonesHTML(state.pits[player][i])}</div><div class="count">${state.pits[player][i]}</div>`; b.onclick=()=>playPit(player,i); parent.appendChild(b); }
 function playPit(player,i){ if(state.gameOver) return; if(player!==state.turn){$('status').textContent='今は '+(state.turn===0?'自分側':'相手側')+' の番です'; return;} if(state.pits[player][i]<=0){$('status').textContent='石がない穴は選べません'; return;} history.push(clone(state)); marks={best:null,capture:null,extra:null}; const r=move(state,i); state=r.state; let msg=(player===0?'自分':'相手')+'の'+(i+1)+'番を選択'; if(r.capture) msg+='：横取りで '+r.capture+' 個ゲット！'; if(r.extra) msg+='：ゴールぴったりでもう一回'; $('lastMove').textContent=msg; $('analysisBox').textContent='AIおすすめを押すと、この盤面から再計算します。'; render(); }
 function showAI(){ const a=aiAnalysis(); if(!a.length){$('analysisBox').textContent='打てる手がありません。';return;} const best=a[0]; marks={best:best.pit,capture:best.capture?best.pit:null,extra:best.extra?best.pit:null}; $('status').textContent=(state.turn===0?'自分':'相手')+'は '+(best.pit+1)+'番がおすすめ';
- $('analysisBox').innerHTML='<b>おすすめ：'+(best.pit+1)+'番</b>'+ (best.capture?'　<span class="tag cap">横取り '+best.capture+'個</span>':'') + (best.extra?'　<span class="tag ext">もう一回</span>':'') + '<div class="hintList">'+ a.slice(0,6).map((x,k)=>'<div class="hintItem"><span>'+(k+1)+'位：'+(x.pit+1)+'番 '+(x.capture?'横取り'+x.capture+'個 ':'')+(x.extra?'もう一回 ':'')+(x.chain?' '+x.chain+' ':'')+(x.risk?'相手横取りリスク'+x.risk+'個':'')+'</span><span class="tag '+(k===0?'best':'')+'">'+Math.round(x.score)+'</span></div>').join('')+'</div><div class="sub">点数はアプリ内の簡易AI評価です。横取り・追加ターン連鎖・次の相手横取りリスクを含めています。</div>';
+ $('analysisBox').innerHTML='<b>おすすめ：'+(best.pit+1)+'番</b>'+ (best.capture?'　<span class="tag cap">横取り '+best.capture+'個</span>':'') + (best.extra?'　<span class="tag ext">もう一回</span>':'') + '<div class="hintList">'+ a.slice(0,6).map((x,k)=>'<div class="hintItem"><span>'+(k+1)+'位：'+(x.pit+1)+'番 '+(x.capture?'横取り'+x.capture+'個 ':'')+(x.extra?'もう一回 ':'')+(x.chain?' '+x.chain+' ':'')+(x.risk?'相手横取りリスク'+x.risk+'個':'')+'</span><span class="tag '+(k===0?'best':'')+'">'+Math.round(x.score)+'</span></div>').join('')+'</div><div class="sub">点数はアプリ内の簡易AI評価です。横取り・追加ターン連鎖・次の相手横取りリスクを含めています。計算が重い盤面では安全のため浅めに止めます。</div>';
  render(); }
 function parseNums(v){return v.split(/[、,\s]+/).filter(Boolean).map(x=>Math.max(0,parseInt(x,10)||0)).slice(0,PITS)}
 $('aiBtn').onclick=showAI; $('undoBtn').onclick=()=>{if(history.length){state=history.pop(); marks={best:null,capture:null,extra:null}; $('lastMove').textContent='一手戻しました'; render();}};
 $('swapBtn').onclick=()=>{state.turn=1-state.turn; marks={best:null,capture:null,extra:null}; $('lastMove').textContent='手番を切り替えました'; render();};
-$('resetBtn').onclick=()=>{history.push(clone(state)); state={pits:[Array(PITS).fill(START),Array(PITS).fill(START)],stores:[0,0],turn:0,gameOver:false}; marks={best:null,capture:null,extra:null}; $('lastMove').textContent='初期盤面に戻しました'; $('analysisBox').textContent='AIおすすめを押すと、横取り・追加ターン連鎖・相手の横取りリスクまで見ます。'; render();};
+$('resetBtn').onclick=()=>{history.push(clone(state)); state={pits:[Array(PITS).fill(START),Array(PITS).fill(START)],stores:[0,0],turn:0,gameOver:false}; marks={best:null,capture:null,extra:null}; $('lastMove').textContent='初期盤面に戻しました'; $('analysisBox').textContent='AIおすすめを押すと、横取り・追加ターン連鎖・相手の横取りリスクまで見ます。v4.7は固まり防止の安全制限つきです。'; render();};
 $('applyBtn').onclick=()=>{let my=parseNums($('myInput').value), op=parseNums($('oppInput').value); while(my.length<PITS)my.push(0); while(op.length<PITS)op.push(0); history.push(clone(state)); state={pits:[my,op],stores:[parseInt($('myStoreInput').value,10)||0,parseInt($('oppStoreInput').value,10)||0],turn:parseInt($('turnInput').value,10)||0,gameOver:false}; finishIfNeeded(state); marks={best:null,capture:null,extra:null}; $('lastMove').textContent='入力した盤面に合わせました'; render();};
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
 render();
