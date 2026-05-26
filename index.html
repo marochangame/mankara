@@ -36,7 +36,7 @@ body{padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom)}
   <button class="btn" id="swapBtn">手番切替</button>
   <button class="btn danger" id="resetBtn">リセット</button>
  </section>
- <section class="panel details" id="analysisBox">AIおすすめを押すと、横取り・追加ターン連鎖・相手の横取りリスクまで見ます。v5.0はゴール通過後の配石方向を修正済みです。</section>
+ <section class="panel details" id="analysisBox">AIおすすめを押すと、横取り・追加ターン連鎖・相手の横取りリスクまで見ます。v5.1は配石方向と総石数チェックを強化済みです。</section>
  <section class="panel">
   <div style="font-weight:1000;margin-bottom:7px">盤面を手入力で合わせる</div>
   <div class="editGrid">
@@ -60,28 +60,34 @@ function opposite(i){return PITS-1-i}
 function legalMoves(s,player=s.turn){return s.pits[player].map((v,i)=>v>0?i:null).filter(v=>v!==null)}
 function sideEmpty(s,p){return sum(s.pits[p])===0}
 function finishIfNeeded(s){ if(sideEmpty(s,0)||sideEmpty(s,1)){ for(let p=0;p<2;p++){s.stores[p]+=sum(s.pits[p]); s.pits[p]=Array(PITS).fill(0)} s.gameOver=true; } return s; }
+function totalStones(s){return sum(s.pits[0])+sum(s.pits[1])+s.stores[0]+s.stores[1];}
 function sowPath(player){
- // v5.0 配石エンジン
- // 画面上の進行方向に統一。
- // 自分側：左→右→自分ゴール→相手1（右端）→相手6（左端）→自分1...
- // 相手側：右→左→相手ゴール→自分1（左端）→自分6（右端）→相手1...
- // つまり、ゴールを越えた直後は「そのゴールに近い相手側の穴」から増える。
- const opp=1-player;
+ // v5.1 配石エンジン：画面上のリング順を明示固定。
+ // state.pits[0] = 自分1,自分2,自分3,自分4,自分5,自分6
+ // state.pits[1] = 相手6,相手5,相手4,相手3,相手2,相手1（画面左→右）
+ // 自分：自分1→...→自分6→自分ゴール→相手1→相手2→...→相手6→自分1
+ // 相手：相手1→...→相手6→相手ゴール→自分1→自分2→...→自分6→相手1
  const path=[];
- const ownOrder = player===0 ? [0,1,2,3,4,5] : [5,4,3,2,1,0];
- const oppOrder = player===0 ? [5,4,3,2,1,0] : [0,1,2,3,4,5];
- ownOrder.forEach(i=>path.push({type:'pit',side:player,idx:i}));
- path.push({type:'store',player});
- oppOrder.forEach(i=>path.push({type:'pit',side:opp,idx:i}));
+ if(player===0){
+  [0,1,2,3,4,5].forEach(i=>path.push({type:'pit',side:0,idx:i}));
+  path.push({type:'store',player:0});
+  [5,4,3,2,1,0].forEach(i=>path.push({type:'pit',side:1,idx:i}));
+ }else{
+  [5,4,3,2,1,0].forEach(i=>path.push({type:'pit',side:1,idx:i}));
+  path.push({type:'store',player:1});
+  [0,1,2,3,4,5].forEach(i=>path.push({type:'pit',side:0,idx:i}));
+ }
  return path;
 }
 function move(s,pit){
  const ns=clone(s); const player=ns.turn;
  if(ns.gameOver||ns.pits[player][pit]<=0) return {state:ns,invalid:true};
+ const beforeTotal=totalStones(ns);
  let stones=ns.pits[player][pit];
  ns.pits[player][pit]=0;
  const path=sowPath(player);
  let pos=path.findIndex(x=>x.type==='pit'&&x.side===player&&x.idx===pit);
+ if(pos<0) return {state:ns,invalid:true,error:'配石開始位置が見つかりません'};
  let last=null;
  while(stones>0){
   pos=(pos+1)%path.length;
@@ -106,7 +112,10 @@ function move(s,pit){
  const extra=last && last.type==='store' && last.player===player;
  if(!extra) ns.turn=1-player;
  finishIfNeeded(ns);
- return {state:ns,player,pit,last,capture,capturedFrom,extra,invalid:false};
+ const afterTotal=totalStones(ns);
+ const invariantBroken=beforeTotal!==afterTotal;
+ if(invariantBroken) console.error('stone total mismatch', {beforeTotal,afterTotal,player,pit,before:s,after:ns});
+ return {state:ns,player,pit,last,capture,capturedFrom,extra,invalid:false,invariantBroken,beforeTotal,afterTotal};
 }
 function evaluate(s,root){
  if(s.gameOver) return (s.stores[root]-s.stores[1-root])*100;
@@ -183,16 +192,16 @@ function render(){
  if(state.gameOver){ const diff=state.stores[0]-state.stores[1]; $('status').textContent=diff>0?'勝ち！ '+state.stores[0]+' 対 '+state.stores[1]:diff<0?'負け… '+state.stores[0]+' 対 '+state.stores[1]:'引き分け '+state.stores[0]+' 対 '+state.stores[1]; }
 }
 function addPit(player,i,parent,label){ const b=document.createElement('button'); b.type='button'; b.className='pit'; if(player===state.turn&&i===marks.best)b.classList.add('best'); if(player===state.turn&&i===marks.capture)b.classList.add('capture'); if(player===state.turn&&i===marks.extra)b.classList.add('extra'); b.innerHTML=`<small>${player===0?'自分':'相手'}${label}</small><div class="stones">${stonesHTML(state.pits[player][i])}</div><div class="count">${state.pits[player][i]}</div>`; b.onclick=()=>playPit(player,i); parent.appendChild(b); }
-function playPit(player,i){ if(state.gameOver) return; if(player!==state.turn){$('status').textContent='今は '+(state.turn===0?'自分側':'相手側')+' の番です'; return;} if(state.pits[player][i]<=0){$('status').textContent='石がない穴は選べません'; return;} history.push(clone(state)); marks={best:null,capture:null,extra:null}; const r=move(state,i); state=r.state; let msg=(player===0?'自分':'相手')+'の'+(i+1)+'番を選択'; if(r.capture) msg+='：横取りで '+r.capture+' 個ゲット！'; if(r.extra) msg+='：ゴールぴったりでもう一回'; $('lastMove').textContent=msg; $('analysisBox').textContent='AIおすすめを押すと、この盤面から再計算します。'; render(); }
+function playPit(player,i){ if(state.gameOver) return; if(player!==state.turn){$('status').textContent='今は '+(state.turn===0?'自分側':'相手側')+' の番です'; return;} if(state.pits[player][i]<=0){$('status').textContent='石がない穴は選べません'; return;} history.push(clone(state)); marks={best:null,capture:null,extra:null}; const r=move(state,i); state=r.state; let msg=(player===0?'自分':'相手')+'の'+(i+1)+'番を選択'; if(r.capture) msg+='：横取りで '+r.capture+' 個ゲット！'; if(r.extra) msg+='：ゴールぴったりでもう一回'; if(r.invariantBroken) msg+=' ⚠総石数エラー'; $('lastMove').textContent=msg; $('analysisBox').textContent='AIおすすめを押すと、この盤面から再計算します。'; render(); }
 function showAI(){ const a=aiAnalysis(); if(!a.length){$('analysisBox').textContent='打てる手がありません。';return;} const best=a[0]; marks={best:best.pit,capture:best.capture?best.pit:null,extra:best.extra?best.pit:null}; $('status').textContent=(state.turn===0?'自分':'相手')+'は '+(best.pit+1)+'番がおすすめ';
  $('analysisBox').innerHTML='<b>おすすめ：'+(best.pit+1)+'番</b>'+ (best.capture?'　<span class="tag cap">横取り '+best.capture+'個</span>':'') + (best.extra?'　<span class="tag ext">もう一回</span>':'') + '<div class="hintList">'+ a.slice(0,6).map((x,k)=>'<div class="hintItem"><span>'+(k+1)+'位：'+(x.pit+1)+'番 '+(x.capture?'横取り'+x.capture+'個 ':'')+(x.extra?'もう一回 ':'')+(x.chain?' '+x.chain+' ':'')+(x.risk?'相手横取りリスク'+x.risk+'個':'')+'</span><span class="tag '+(k===0?'best':'')+'">'+Math.round(x.score)+'</span></div>').join('')+'</div><div class="sub">点数はアプリ内の簡易AI評価です。横取り・追加ターン連鎖・次の相手横取りリスクを含めています。計算が重い盤面では安全のため浅めに止めます。</div>';
  render(); }
 function parseNums(v){return v.split(/[、,\s]+/).filter(Boolean).map(x=>Math.max(0,parseInt(x,10)||0)).slice(0,PITS)}
 $('aiBtn').onclick=showAI; $('undoBtn').onclick=()=>{if(history.length){state=history.pop(); marks={best:null,capture:null,extra:null}; $('lastMove').textContent='一手戻しました'; render();}};
 $('swapBtn').onclick=()=>{state.turn=1-state.turn; marks={best:null,capture:null,extra:null}; $('lastMove').textContent='手番を切り替えました'; render();};
-$('resetBtn').onclick=()=>{history.push(clone(state)); state={pits:[Array(PITS).fill(START),Array(PITS).fill(START)],stores:[0,0],turn:0,gameOver:false}; marks={best:null,capture:null,extra:null}; $('lastMove').textContent='初期盤面に戻しました'; $('analysisBox').textContent='AIおすすめを押すと、横取り・追加ターン連鎖・相手の横取りリスクまで見ます。v5.0はゴール通過後の配石方向を修正済みです。v4.7は固まり防止の安全制限つきです。'; render();};
+$('resetBtn').onclick=()=>{history.push(clone(state)); state={pits:[Array(PITS).fill(START),Array(PITS).fill(START)],stores:[0,0],turn:0,gameOver:false}; marks={best:null,capture:null,extra:null}; $('lastMove').textContent='初期盤面に戻しました'; $('analysisBox').textContent='AIおすすめを押すと、横取り・追加ターン連鎖・相手の横取りリスクまで見ます。v5.1は配石方向と総石数チェックを強化済みです。v4.7は固まり防止の安全制限つきです。'; render();};
 $('applyBtn').onclick=()=>{let my=parseNums($('myInput').value), op=parseNums($('oppInput').value); while(my.length<PITS)my.push(0); while(op.length<PITS)op.push(0); history.push(clone(state)); state={pits:[my,op],stores:[parseInt($('myStoreInput').value,10)||0,parseInt($('oppStoreInput').value,10)||0],turn:parseInt($('turnInput').value,10)||0,gameOver:false}; finishIfNeeded(state); marks={best:null,capture:null,extra:null}; $('lastMove').textContent='入力した盤面に合わせました'; render();};
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())).catch(()=>{}));}
 render();
 </script>
 </body>
